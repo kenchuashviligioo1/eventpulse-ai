@@ -52,6 +52,7 @@ const INITIAL_EVENTS = [
 export const useEventStore = create(
   persist(
     (set) => ({
+      theme: "light", // 'light' | 'dark'
       events: INITIAL_EVENTS,
       selectedEventId: null,
       tickets: [], // მომხმარებლის ნაყიდი ბილეთები
@@ -80,7 +81,13 @@ export const useEventStore = create(
         },
       ],
 
-      // AI მოთხოვნის დონის შეცვლა (დემო სიმულატორისთვის)
+      // თემის შეცვლა (Light / Dark)
+      toggleTheme: () =>
+        set((state) => ({
+          theme: state.theme === "light" ? "dark" : "light",
+        })),
+
+      // AI მოთხოვნის დონის შეცვლა (ორგანიზატორის პანელიდან)
       updateEventDemand: (eventId, newDemand) =>
         set((state) => ({
           events: state.events.map((ev) =>
