@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MainLayout } from "./MainLayout";
 import { EventsPage } from "../features/events/EventsPage";
 import { MyTicketsPage } from "../features/ticket-pass/MyTicketsPage";
+import { ScannerPage } from "../features/scanner/ScannerPage";
 
 const Placeholder = ({ title }) => (
   <div className="p-8 rounded-2xl border-[1.5px] border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-center">
@@ -25,10 +26,7 @@ export default function App() {
             path="/sponsor"
             element={<Placeholder title="სპონსორის ROI Dashboard" />}
           />
-          <Route
-            path="/scanner"
-            element={<Placeholder title="ორგანიზატორის QR სკანერი" />}
-          />
+          <Route path="/scanner" element={<ScannerPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
