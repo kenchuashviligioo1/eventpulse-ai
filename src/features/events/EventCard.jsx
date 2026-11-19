@@ -1,4 +1,4 @@
-import { Calendar, MapPin, Flame, ArrowRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Badge } from "../../shared/components/Badge";
 import {
   calculateDynamicPrice,
@@ -13,61 +13,38 @@ export function EventCard({ event }) {
   const remaining = event.totalTickets - event.soldTickets;
 
   return (
-    <div className="group rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden flex flex-col hover:border-zinc-700 transition">
-      {/* სურათი */}
-      <div className="relative h-48 overflow-hidden bg-zinc-800">
+    <article className="group rounded-xl border border-white/8 bg-[#111111] overflow-hidden flex flex-col hover:border-white/20 transition-colors">
+      {/* სუფთა სურათი ზედმეტი წარწერების გარეშე */}
+      <div className="aspect-16/10 overflow-hidden bg-zinc-900">
         <img
           src={event.image}
           alt={event.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition duration-500 opacity-90"
+          className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
-
-        {/* ბეჯი ჩანს მხოლოდ მაშინ, როცა მომხმარებლისთვის ფასდაკლებაა */}
-        {pricing.isDiscounted && (
-          <div className="absolute top-3 left-3">
-            <Badge variant="success" pulse>
-              {pricing.badgeText}
-            </Badge>
-          </div>
-        )}
-
-        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-xs text-zinc-300">
-          <span className="px-2.5 py-1 rounded-md bg-zinc-950/80 backdrop-blur border border-zinc-800">
-            {event.category}
-          </span>
-          {pricing.isHighDemand && (
-            <span className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 backdrop-blur">
-              <Flame className="w-3.5 h-3.5" />
-              სწრაფად იყიდება
-            </span>
-          )}
-        </div>
       </div>
 
-      {/* კონტენტი */}
-      <div className="p-5 flex-1 flex flex-col justify-between gap-5">
-        <div>
-          <h3 className="text-lg font-bold text-white leading-snug">
+      {/* ტექსტური ნაწილი */}
+      <div className="p-5 flex-1 flex flex-col justify-between gap-6">
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
+            <span>{event.date}</span>
+            {pricing.isDiscounted && (
+              <Badge variant="success">-15% სპეც. ფასი</Badge>
+            )}
+          </div>
+
+          <h3 className="text-base font-semibold text-white leading-snug">
             {event.title}
           </h3>
-          <div className="mt-3 space-y-1.5 text-sm text-zinc-400">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-zinc-500 shrink-0" />
-              <span>{event.date}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-zinc-500 shrink-0" />
-              <span>{event.location}</span>
-            </div>
-          </div>
+
+          <p className="text-xs text-zinc-500">{event.location}</p>
         </div>
 
-        {/* ფასი და ყიდვის ღილაკი */}
-        <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between gap-3">
+        {/* ქვედა ზოლი: ფასი და მოქმედება */}
+        <div className="pt-4 border-t border-white/6 flex items-center justify-between">
           <div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-white font-mono-num">
+              <span className="text-lg font-semibold text-white font-mono-num">
                 {formatPrice(pricing.price)}
               </span>
               {pricing.isDiscounted && (
@@ -76,22 +53,20 @@ export function EventCard({ event }) {
                 </span>
               )}
             </div>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              დარჩა{" "}
-              <span className="font-mono-num text-zinc-200">{remaining}</span>{" "}
-              ბილეთი
+            <p className="text-[11px] text-zinc-500 mt-0.5">
+              დარჩენილია {remaining} ბილეთი
             </p>
           </div>
 
           <button
             onClick={() => openCheckout(event.id)}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-lg shadow-indigo-500/20"
+            className="px-3.5 py-2 rounded-lg bg-white hover:bg-zinc-200 text-black text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
           >
-            <span>ყიდვა</span>
-            <ArrowRight className="w-4 h-4" />
+            <span>ბილეთი</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
