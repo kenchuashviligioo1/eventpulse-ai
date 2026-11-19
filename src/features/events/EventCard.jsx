@@ -15,7 +15,7 @@ export function EventCard({ event }) {
   return (
     <article className="group rounded-2xl border-[1.5px] border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden flex flex-col transition-all duration-300 ease-out hover:-translate-y-1.5 hover:border-zinc-900 dark:hover:border-zinc-400 hover:shadow-xl hover:shadow-zinc-900/10 dark:hover:shadow-black/50">
       {/* სურათის კონტეინერი */}
-      <div className="aspect-[16/10] overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="aspect-16/10 overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-800">
         <img
           src={event.image}
           alt={event.title}

@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MainLayout } from "./MainLayout";
 import { EventsPage } from "../features/events/EventsPage";
 import { MyTicketsPage } from "../features/ticket-pass/MyTicketsPage";
 import { ScannerPage } from "../features/scanner/ScannerPage";
+import { useEventStore } from "../store/useEventStore";
 
 const Placeholder = ({ title }) => (
   <div className="p-8 rounded-2xl border-[1.5px] border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-center">
@@ -16,6 +18,13 @@ const Placeholder = ({ title }) => (
 );
 
 export default function App() {
+  const subscribeToTickets = useEventStore((state) => state.subscribeToTickets);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToTickets();
+    return () => unsubscribe();
+  }, [subscribeToTickets]);
+
   return (
     <BrowserRouter>
       <Routes>
@@ -26,8 +35,9 @@ export default function App() {
             path="/sponsor"
             element={<Placeholder title="სპონსორის ROI Dashboard" />}
           />
-          <Route path="/scanner" element={<ScannerPage />} />
         </Route>
+
+        <Route path="/scanner" element={<ScannerPage />} />
       </Routes>
     </BrowserRouter>
   );

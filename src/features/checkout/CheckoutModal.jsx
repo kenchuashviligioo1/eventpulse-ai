@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +9,7 @@ import {
   calculateDynamicPrice,
   formatPrice,
 } from "../../shared/utils/formatters";
+import { generateTicketBaseCode } from "../../shared/utils/dynamicCode";
 
 const checkoutSchema = yup.object({
   fullName: yup
@@ -44,7 +45,7 @@ export function CheckoutModal() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     setValue,
     reset,
     formState: { errors },
@@ -58,7 +59,10 @@ export function CheckoutModal() {
     },
   });
 
-  const paymentMethod = watch("paymentMethod");
+  const paymentMethod = useWatch({
+    control,
+    name: "paymentMethod",
+  });
 
   if (!event) return null;
 
@@ -70,15 +74,13 @@ export function CheckoutModal() {
     closeCheckout();
   };
 
-  const onSubmit = (data) => {
+  const onSubmit = async (data) => {
     setIsProcessing(true);
 
-    // გადახდის სიმულაცია (1.2 წამი)
-    setTimeout(() => {
-      const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-      const newTicket = {
-        id: `tkt-${Date.now()}`,
-        code: `EP-${randomSuffix}`,
+    try {
+      const baseCode = generateTicketBaseCode();
+      await addTicket({
+        baseCode,
         eventId: event.id,
         eventTitle: event.title,
         eventDate: event.date,
@@ -94,14 +96,17 @@ export function CheckoutModal() {
         }),
         used: false,
         scannedAt: null,
-      };
+      });
 
-      addTicket(newTicket);
-      setIsProcessing(false);
       reset();
       closeCheckout();
       navigate("/my-tickets");
-    }, 1200);
+    } catch (err) {
+      console.error("Firebase error:", err);
+      alert("ბილეთის შენახვა ვერ მოხერხდა. შეამოწმეთ Firebase კონფიგურაცია.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -242,7 +247,7 @@ export function CheckoutModal() {
               {isProcessing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>მუშავდება...</span>
+                  <span>ინახება...</span>
                 </>
               ) : (
                 <>

@@ -5,6 +5,9 @@ import { DynamicTicketCard } from "./DynamicTicketCard";
 
 export function MyTicketsPage() {
   const tickets = useEventStore((state) => state.tickets);
+  const myTicketIds = useEventStore((state) => state.myTicketIds);
+
+  const myTickets = tickets.filter((t) => myTicketIds.includes(t.id));
 
   return (
     <div className="space-y-8">
@@ -18,11 +21,11 @@ export function MyTicketsPage() {
           </h1>
         </div>
         <span className="text-xs text-zinc-500 dark:text-zinc-400 font-mono-num">
-          სულ: {tickets.length}
+          სულ: {myTickets.length}
         </span>
       </section>
 
-      {tickets.length === 0 ? (
+      {myTickets.length === 0 ? (
         <div className="rounded-2xl border-[1.5px] border-dashed border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900/50 p-12 text-center space-y-4">
           <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center mx-auto text-zinc-500">
             <Ticket className="w-6 h-6" />
@@ -46,7 +49,7 @@ export function MyTicketsPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {tickets.map((ticket) => (
+          {myTickets.map((ticket) => (
             <DynamicTicketCard key={ticket.id} ticket={ticket} />
           ))}
         </div>

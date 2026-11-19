@@ -1,5 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import {
+  collection,
+  addDoc,
+  doc,
+  updateDoc,
+  onSnapshot,
+  query,
+  orderBy,
+} from "firebase/firestore";
+import { db } from "../shared/lib/firebase";
 
 const INITIAL_EVENTS = [
   {
@@ -11,7 +21,7 @@ const INITIAL_EVENTS = [
     basePrice: 50,
     totalTickets: 500,
     soldTickets: 412,
-    demandLevel: 82, // 0-100 სკალა AI-სთვის
+    demandLevel: 82,
     activeUsers: 148,
     image:
       "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1000&q=80",
@@ -26,7 +36,7 @@ const INITIAL_EVENTS = [
     basePrice: 80,
     totalTickets: 300,
     soldTickets: 85,
-    demandLevel: 24, // დაბალი მოთხოვნა -> ჩაირთვება Smart Drop
+    demandLevel: 24,
     activeUsers: 19,
     image:
       "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=1000&q=80",
@@ -41,7 +51,7 @@ const INITIAL_EVENTS = [
     basePrice: 40,
     totalTickets: 250,
     soldTickets: 140,
-    demandLevel: 55, // ნორმალური მოთხოვნა
+    demandLevel: 55,
     activeUsers: 64,
     image:
       "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1000&q=80",
@@ -52,11 +62,12 @@ const INITIAL_EVENTS = [
 export const useEventStore = create(
   persist(
     (set) => ({
-      theme: "light", // 'light' | 'dark'
+      theme: "light",
       events: INITIAL_EVENTS,
       selectedEventId: null,
-      tickets: [], // მომხმარებლის ნაყიდი ბილეთები
-      isScannerAuth: false, // ორგანიზატორის სესია
+      tickets: [],
+      myTicketIds: [],
+      isScannerAuth: false,
       sponsorScans: [
         {
           id: 1,
@@ -81,13 +92,11 @@ export const useEventStore = create(
         },
       ],
 
-      // თემის შეცვლა (Light / Dark)
       toggleTheme: () =>
         set((state) => ({
           theme: state.theme === "light" ? "dark" : "light",
         })),
 
-      // AI მოთხოვნის დონის შეცვლა (ორგანიზატორის პანელიდან)
       updateEventDemand: (eventId, newDemand) =>
         set((state) => ({
           events: state.events.map((ev) =>
@@ -101,46 +110,74 @@ export const useEventStore = create(
           ),
         })),
 
-      // Checkout-ისთვის ივენთის არჩევა
       openCheckout: (eventId) => set({ selectedEventId: eventId }),
       closeCheckout: () => set({ selectedEventId: null }),
 
-      // ახალი ბილეთის დამატება
-      addTicket: (ticket) =>
-        set((state) => ({
-          tickets: [ticket, ...state.tickets],
-          events: state.events.map((ev) =>
-            ev.id === ticket.eventId
-              ? {
-                  ...ev,
-                  soldTickets: Math.min(ev.totalTickets, ev.soldTickets + 1),
-                }
-              : ev
-          ),
-        })),
+      // Firestore Real-time Listener
+      subscribeToTickets: () => {
+        const q = query(
+          collection(db, "tickets"),
+          orderBy("createdAt", "desc")
+        );
+        return onSnapshot(
+          q,
+          (snapshot) => {
+            const liveTickets = snapshot.docs.map((docSnap) => ({
+              id: docSnap.id,
+              ...docSnap.data(),
+            }));
+            set({ tickets: liveTickets });
+          },
+          (error) => {
+            console.error("Firestore snapshot error:", error);
+          }
+        );
+      },
 
-      // კარის სკანერით ბილეთის გამოყენებულად მონიშვნა
-      markTicketUsed: (ticketCode) =>
-        set((state) => ({
-          tickets: state.tickets.map((t) =>
-            t.code === ticketCode
-              ? {
-                  ...t,
-                  used: true,
-                  scannedAt: new Date().toLocaleTimeString("ka-GE", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }),
-                }
-              : t
-          ),
-        })),
+      // ბილეთის შენახვა Firebase Firestore-ში + მომენტალური გამოჩენა UI-ში
+      addTicket: async (ticketData) => {
+        const newPayload = {
+          ...ticketData,
+          createdAt: Date.now(),
+        };
 
-      // ორგანიზატორის ავტორიზაცია
+        const docRef = await addDoc(collection(db, "tickets"), newPayload);
+        const savedTicket = { id: docRef.id, ...newPayload };
+
+        set((state) => {
+          const alreadyExists = state.tickets.some((t) => t.id === docRef.id);
+          return {
+            myTicketIds: [docRef.id, ...state.myTicketIds],
+            tickets: alreadyExists
+              ? state.tickets
+              : [savedTicket, ...state.tickets],
+            events: state.events.map((ev) =>
+              ev.id === ticketData.eventId
+                ? {
+                    ...ev,
+                    soldTickets: Math.min(ev.totalTickets, ev.soldTickets + 1),
+                  }
+                : ev
+            ),
+          };
+        });
+      },
+
+      // ბილეთის გამოყენებულად მონიშვნა Firestore-ში
+      markTicketUsed: async (ticketDocId) => {
+        const ticketRef = doc(db, "tickets", ticketDocId);
+        await updateDoc(ticketRef, {
+          used: true,
+          scannedAt: new Date().toLocaleTimeString("ka-GE", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        });
+      },
+
       loginScanner: () => set({ isScannerAuth: true }),
       logoutScanner: () => set({ isScannerAuth: false }),
 
-      // სპონსორის სტენდზე სკანირების სიმულაცია
       addSponsorScan: (scan) =>
         set((state) => ({
           sponsorScans: [scan, ...state.sponsorScans],
@@ -148,6 +185,13 @@ export const useEventStore = create(
     }),
     {
       name: "eventpulse-storage",
+      partialize: (state) => ({
+        theme: state.theme,
+        events: state.events,
+        myTicketIds: state.myTicketIds,
+        isScannerAuth: state.isScannerAuth,
+        sponsorScans: state.sponsorScans,
+      }),
     }
   )
 );

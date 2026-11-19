@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import {
   Camera,
@@ -6,314 +6,354 @@ import {
   CheckCircle2,
   XCircle,
   Search,
-  RotateCcw,
+  Volume2,
+  VolumeX,
+  ArrowRight,
+  LogOut,
 } from "lucide-react";
 import { useEventStore } from "../../store/useEventStore";
+import { playScanBeep } from "../../shared/utils/sound";
+import {
+  generateRollingTicketCode,
+  getTimeWindow,
+} from "../../shared/utils/dynamicCode";
 
 export function TicketScannerBox() {
   const tickets = useEventStore((state) => state.tickets);
   const markTicketUsed = useEventStore((state) => state.markTicketUsed);
+  const logoutScanner = useEventStore((state) => state.logoutScanner);
 
   const [manualCode, setManualCode] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
+  const [shouldResumeCamera, setShouldResumeCamera] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [cameraError, setCameraError] = useState("");
-  const [scanResult, setScanResult] = useState(null); // { status: 'valid' | 'used' | 'expired' | 'invalid', message, ticket? }
+  const [scanResult, setScanResult] = useState(null);
 
   const scannerRef = useRef(null);
 
-  // ბილეთის ვალიდაციის მთავარი ლოგიკა
-  const verifyPayload = (rawInput) => {
-    const cleaned = rawInput.trim();
-    if (!cleaned) return;
+  const verifyPayload = useCallback(
+    async (rawInput, fromCamera = false) => {
+      const cleaned = rawInput.trim().toUpperCase();
+      if (!cleaned) return;
 
-    // QR კოდის ფორმატია "EP-123456:58943210" (კოდი + 30-წამიანი სლოტი), ხელით შეყვანისას კი მხოლოდ "EP-123456"
-    const [ticketCode, scannedSlotStr] = cleaned.split(":");
-    const foundTicket = tickets.find(
-      (t) => t.code.toUpperCase() === ticketCode.toUpperCase()
-    );
+      setShouldResumeCamera(fromCamera);
 
-    if (!foundTicket) {
-      setScanResult({
-        status: "invalid",
-        message: "ბილეთი ბაზაში ვერ მოიძებნა (არავალიდური კოდი)",
-      });
-      return;
-    }
+      // კოდის ფორმატია "EP-4829-731" -> baseCode არის "EP-4829"
+      const parts = cleaned.split("-");
+      if (parts.length !== 3) {
+        if (soundEnabled) playScanBeep(false);
+        setScanResult({
+          status: "invalid",
+          title: "არავალიდური ფორმატი",
+          message: "შეიყვანეთ სრული დინამიკური კოდი (მაგ. EP-4829-731)",
+        });
+        return;
+      }
 
-    // თუ QR კამერით დასკანერდა, ვამოწმებთ 30-წამიან დინამიკურ ფანჯარას (ვაძლევთ 1 სლოტის ცდომილებას დაყოვნებისთვის)
-    if (scannedSlotStr) {
-      const currentSlot = Math.floor(Date.now() / 30000);
-      const scannedSlot = Number(scannedSlotStr);
-      if (Math.abs(currentSlot - scannedSlot) > 1) {
+      const baseCode = `${parts[0]}-${parts[1]}`;
+      const foundTicket = tickets.find((t) => t.baseCode === baseCode);
+
+      if (!foundTicket) {
+        if (soundEnabled) playScanBeep(false);
+        setScanResult({
+          status: "invalid",
+          title: "არავალიდური ბილეთი",
+          message: "ბილეთი ბაზაში ვერ მოიძებნა",
+        });
+        return;
+      }
+
+      // ვამოწმებთ მიმდინარე (და წინა 1 სლოტის) 30-წამიან დინამიკურ კოდს
+      const { slot } = getTimeWindow();
+      const validCurrentCode = generateRollingTicketCode(baseCode, slot);
+      const validPreviousCode = generateRollingTicketCode(baseCode, slot - 1);
+
+      if (cleaned !== validCurrentCode && cleaned !== validPreviousCode) {
+        if (soundEnabled) playScanBeep(false);
         setScanResult({
           status: "expired",
+          title: "კოდს ვადა გაუვიდა",
           message:
-            "QR კოდს ვადა გაუვიდა! სავარაუდო სქრინშოტი — სთხოვეთ ცოცხალი საშვის ჩვენება.",
+            "30-წამიანი ფანჯარა ამოიწურა — სთხოვეთ განახლებული კოდის ჩვენება.",
           ticket: foundTicket,
         });
         return;
       }
-    }
 
-    if (foundTicket.used) {
+      if (foundTicket.used) {
+        if (soundEnabled) playScanBeep(false);
+        setScanResult({
+          status: "used",
+          title: "უკვე გამოყენებულია",
+          message: `ბილეთი დასკანერდა ${foundTicket.scannedAt}-ზე`,
+          ticket: foundTicket,
+        });
+        return;
+      }
+
+      // ბაზაში (Firebase Firestore) ვნიშნავთ გამოყენებულად
+      await markTicketUsed(foundTicket.id);
+      if (soundEnabled) playScanBeep(true);
       setScanResult({
-        status: "used",
-        message: `ბილეთი უკვე გამოყენებულია (${foundTicket.scannedAt}-ზე)!`,
+        status: "valid",
+        title: "დაშვებულია",
+        message: "ბილეთი ვალიდურია • სტუმარს შეუძლია შესვლა",
         ticket: foundTicket,
       });
+    },
+    [tickets, markTicketUsed, soundEnabled]
+  );
+
+  const handleNextGuest = () => {
+    setScanResult(null);
+    if (shouldResumeCamera) {
+      setCameraActive(true);
+    }
+  };
+
+  const handleToggleCamera = () => {
+    if (cameraActive) {
+      setCameraActive(false);
       return;
     }
 
-    // წარმატებული ვალიდაცია -> ვნიშნავთ გამოყენებულად
-    markTicketUsed(foundTicket.code);
-    setScanResult({
-      status: "valid",
-      message: "ბილეთი ვალიდურია • სტუმარი დაშვებულია",
-      ticket: foundTicket,
-    });
+    if (!window.isSecureContext) {
+      setCameraError(
+        "ტელეფონის ბრაუზერი კამერას ბლოკავს HTTP-ზე. გახსენით HTTPS-ზე ან localhost-ზე."
+      );
+      return;
+    }
+
+    setCameraError("");
+    setCameraActive(true);
   };
 
-  // კამერის ჩართვა/გამორთვა
   useEffect(() => {
     if (!cameraActive) return;
 
-    setCameraError("");
+    let isMounted = true;
     const html5QrCode = new Html5Qrcode("qr-reader-region");
     scannerRef.current = html5QrCode;
 
-    html5QrCode
-      .start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decodedText) => {
-          verifyPayload(decodedText);
+    Html5Qrcode.getCameras()
+      .then((devices) => {
+        if (!isMounted) return;
+        if (!devices || devices.length === 0) {
+          setCameraError("მოწყობილობაზე კამერა ვერ მოიძებნა.");
           setCameraActive(false);
-        },
-        () => {}
-      )
+          return;
+        }
+
+        const backCamera = devices.find(
+          (d) =>
+            d.label.toLowerCase().includes("back") ||
+            d.label.toLowerCase().includes("environment")
+        );
+        const cameraId = backCamera ? backCamera.id : devices[0].id;
+
+        return html5QrCode.start(
+          cameraId,
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          (decodedText) => {
+            verifyPayload(decodedText, true);
+            setCameraActive(false);
+          },
+          () => {}
+        );
+      })
       .catch(() => {
+        if (!isMounted) return;
         setCameraError(
-          "კამერაზე წვდომა ვერ მოხერხდა. გამოიყენეთ კოდის ხელით შეყვანა."
+          "კამერა დაბლოკილია ბრაუზერის მიერ. შეამოწმეთ კამერის ნებართვა."
         );
         setCameraActive(false);
       });
 
     return () => {
+      isMounted = false;
       if (scannerRef.current?.isScanning) {
         scannerRef.current.stop().catch(() => {});
       }
     };
-  }, [cameraActive]);
+  }, [cameraActive, verifyPayload]);
 
   const handleManualSubmit = (e) => {
     e.preventDefault();
-    verifyPayload(manualCode);
+    verifyPayload(manualCode, false);
     setManualCode("");
   };
 
   const scannedCount = tickets.filter((t) => t.used).length;
+  const isValidResult = scanResult?.status === "valid";
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* მარცხენა ბლოკი: სკანერი და კოდის შეყვანა */}
-      <div className="rounded-2xl border-[1.5px] border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-sm p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-bold text-zinc-900 dark:text-white">
-              ბილეთის შემოწმება
-            </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              დაასკანერეთ დინამიკური QR ან შეიყვანეთ ბილეთის ID
-            </p>
-          </div>
-          <div className="text-right">
-            <span className="text-[11px] text-zinc-400 block">
-              შემოსული სტუმრები
-            </span>
-            <span className="font-mono-num text-sm font-bold text-zinc-900 dark:text-white">
-              {scannedCount} / {tickets.length}
-            </span>
-          </div>
-        </div>
-
-        {/* კამერის არეალი */}
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 flex flex-col items-center justify-center min-h-[240px]">
-          {cameraActive ? (
-            <div
-              id="qr-reader-region"
-              className="w-full max-w-[280px] overflow-hidden rounded-lg"
-            />
-          ) : (
-            <div className="text-center space-y-3 py-6">
-              <div className="w-12 h-12 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-center mx-auto text-zinc-500">
-                <Camera className="w-5 h-5" />
-              </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs">
-                ჩართეთ კამერა სმარტფონის ეკრანიდან QR კოდის წასაკითხად
-              </p>
+    <>
+      <div className="w-full max-w-md mx-auto">
+        <div className="rounded-2xl border-[1.5px] border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-sm p-4 sm:p-5 space-y-4">
+          {/* ზედა კომპაქტური ზოლი: მრიცხველი + ხმა + გასვლა */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono-num text-xl font-bold text-zinc-900 dark:text-white">
+                {scannedCount}/{tickets.length}
+              </span>
+              <span className="text-xs text-zinc-400">შემოსული</span>
             </div>
-          )}
 
-          {cameraError && (
-            <p className="text-xs text-rose-600 dark:text-rose-400 mt-2 text-center">
-              {cameraError}
-            </p>
-          )}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSoundEnabled((prev) => !prev)}
+                aria-label="ხმის გადართვა"
+                className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 transition cursor-pointer"
+              >
+                {soundEnabled ? (
+                  <Volume2 className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <VolumeX className="w-4 h-4 text-zinc-400" />
+                )}
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setCameraActive((prev) => !prev)}
-            className="mt-3 px-4 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-zinc-900 dark:hover:border-white text-xs font-semibold text-zinc-900 dark:text-white flex items-center gap-2 transition cursor-pointer"
-          >
+              <button
+                type="button"
+                onClick={logoutScanner}
+                aria-label="გასვლა"
+                className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-500 hover:text-rose-600 dark:hover:text-rose-400 transition cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* კამერის არეალი */}
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4 flex flex-col items-center justify-center min-h-62.5">
             {cameraActive ? (
-              <>
-                <CameraOff className="w-3.5 h-3.5" />
-                <span>კამერის გამორთვა</span>
-              </>
+              <div
+                id="qr-reader-region"
+                className="w-full max-w-67.5 overflow-hidden rounded-lg"
+              />
             ) : (
-              <>
-                <Camera className="w-3.5 h-3.5" />
-                <span>კამერის ჩართვა</span>
-              </>
+              <div className="w-14 h-14 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-center text-zinc-700 dark:text-zinc-300 my-6">
+                <Camera className="w-6 h-6" />
+              </div>
             )}
-          </button>
-        </div>
 
-        {/* ხელით შეყვანის ფორმა */}
-        <form onSubmit={handleManualSubmit} className="space-y-2">
-          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-            ბილეთის კოდით შემოწმება
-          </label>
-          <div className="flex gap-2">
+            {cameraError && (
+              <p className="text-xs text-rose-600 dark:text-rose-400 mt-2 text-center">
+                {cameraError}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleToggleCamera}
+              className="mt-3 w-full py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              {cameraActive ? (
+                <>
+                  <CameraOff className="w-4 h-4" />
+                  <span>კამერის გამორთვა</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="w-4 h-4" />
+                  <span>კამერის ჩართვა</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* კოდის ხელით შეყვანა */}
+          <form onSubmit={handleManualSubmit} className="flex gap-2">
             <input
               type="text"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
-              placeholder="მაგ. EP-482910"
+              placeholder="EP-4829-731"
               className="flex-1 px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-sm text-zinc-900 dark:text-white font-mono-num uppercase focus:outline-none focus:border-zinc-900 dark:focus:border-white transition"
             />
             <button
               type="submit"
-              className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+              aria-label="შემოწმება"
+              className="px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:border-zinc-900 dark:hover:border-white text-zinc-900 dark:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
             >
-              <Search className="w-3.5 h-3.5" />
-              <span>შემოწმება</span>
+              <Search className="w-4 h-4" />
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
 
-      {/* მარჯვენა ბლოკი: სკანირების შედეგი */}
-      <div className="rounded-2xl border-[1.5px] border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-sm p-6 flex flex-col justify-between">
-        <div>
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-zinc-900 dark:text-white">
-              ვალიდაციის სტატუსი
-            </h2>
-            {scanResult && (
-              <button
-                onClick={() => setScanResult(null)}
-                className="text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-white flex items-center gap-1 cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>გასუფთავება</span>
-              </button>
+      {/* სრულეკრანიანი (Fullscreen) შედეგი */}
+      {scanResult && (
+        <div
+          className={`fixed inset-0 z-50 h-dvh overflow-hidden flex flex-col justify-between p-6 sm:p-10 text-white ${
+            isValidResult ? "bg-emerald-600" : "bg-rose-600"
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-widest opacity-85">
+            <span>EventPulse</span>
+            <span className="font-mono-num">
+              {new Date().toLocaleTimeString("ka-GE", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          </div>
+
+          <div className="max-w-md w-full mx-auto text-center space-y-5 my-auto">
+            <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center mx-auto">
+              {isValidResult ? (
+                <CheckCircle2 className="w-14 h-14 text-white" />
+              ) : (
+                <XCircle className="w-14 h-14 text-white" />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
+                {scanResult.title}
+              </h2>
+              <p className="text-sm sm:text-base text-white/90">
+                {scanResult.message}
+              </p>
+            </div>
+
+            {scanResult.ticket && (
+              <div className="mt-6 p-5 rounded-2xl bg-black/20 border border-white/20 text-left space-y-2.5 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-white/70">სტუმარი:</span>
+                  <span className="font-bold text-right">
+                    {scanResult.ticket.ownerName}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-white/70">ღონისძიება:</span>
+                  <span className="font-semibold text-right line-clamp-1">
+                    {scanResult.ticket.eventTitle}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-white/70">ბილეთის ID:</span>
+                  <span className="font-mono-num font-bold">
+                    {scanResult.ticket.baseCode}
+                  </span>
+                </div>
+              </div>
             )}
           </div>
 
-          {!scanResult ? (
-            <div className="py-16 text-center text-xs text-zinc-400 dark:text-zinc-500">
-              მოლოდინის რეჟიმი — დაასკანერეთ ბილეთი შედეგის სანახავად
-            </div>
-          ) : (
-            <div
-              className={`mt-6 p-6 rounded-2xl border-[1.5px] space-y-4 ${
-                scanResult.status === "valid"
-                  ? "border-emerald-300 dark:border-emerald-500/40 bg-emerald-50/70 dark:bg-emerald-500/10"
-                  : "border-rose-300 dark:border-rose-500/40 bg-rose-50/70 dark:bg-rose-500/10"
-              }`}
+          <div className="max-w-md w-full mx-auto">
+            <button
+              type="button"
+              onClick={handleNextGuest}
+              className="w-full py-4 px-6 rounded-2xl bg-white text-zinc-950 hover:bg-zinc-100 active:scale-[0.99] text-base font-bold flex items-center justify-center gap-2 shadow-xl transition cursor-pointer"
             >
-              <div className="flex items-start gap-3">
-                {scanResult.status === "valid" ? (
-                  <CheckCircle2 className="w-7 h-7 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                ) : (
-                  <XCircle className="w-7 h-7 text-rose-600 dark:text-rose-400 shrink-0" />
-                )}
-                <div>
-                  <h3
-                    className={`text-base font-bold ${
-                      scanResult.status === "valid"
-                        ? "text-emerald-900 dark:text-emerald-200"
-                        : "text-rose-900 dark:text-rose-200"
-                    }`}
-                  >
-                    {scanResult.status === "valid"
-                      ? "დაშვებულია"
-                      : "უარყოფილია"}
-                  </h3>
-                  <p
-                    className={`text-xs mt-1 ${
-                      scanResult.status === "valid"
-                        ? "text-emerald-700 dark:text-emerald-300"
-                        : "text-rose-700 dark:text-rose-300"
-                    }`}
-                  >
-                    {scanResult.message}
-                  </p>
-                </div>
-              </div>
-
-              {scanResult.ticket && (
-                <div className="pt-4 border-t border-black/10 dark:border-white/10 space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="opacity-70">სტუმარი:</span>
-                    <span className="font-semibold">
-                      {scanResult.ticket.ownerName}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="opacity-70">ღონისძიება:</span>
-                    <span className="font-semibold">
-                      {scanResult.ticket.eventTitle}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="opacity-70">ბილეთის ID:</span>
-                    <span className="font-mono-num font-bold">
-                      {scanResult.ticket.code}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ბოლო ბილეთების სწრაფი სია ტესტირებისთვის */}
-        {tickets.length > 0 && (
-          <div className="pt-5 mt-6 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
-            <span className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold block">
-              გაყიდული ბილეთები (სწრაფი ტესტი)
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {tickets.slice(0, 5).map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => verifyPayload(t.code)}
-                  className={`px-2.5 py-1 rounded-lg border text-xs font-mono-num transition cursor-pointer ${
-                    t.used
-                      ? "border-zinc-200 dark:border-zinc-800 text-zinc-400 line-through"
-                      : "border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:border-zinc-900 dark:hover:border-white"
-                  }`}
-                >
-                  {t.code}
-                </button>
-              ))}
-            </div>
+              <span>შემდეგი სტუმარი</span>
+              <ArrowRight className="w-5 h-5" />
+            </button>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 }

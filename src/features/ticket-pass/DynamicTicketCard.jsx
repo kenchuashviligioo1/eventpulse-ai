@@ -10,42 +10,41 @@ import {
 } from "lucide-react";
 import { Badge } from "../../shared/components/Badge";
 import { formatPrice } from "../../shared/utils/formatters";
+import {
+  generateRollingTicketCode,
+  getTimeWindow,
+} from "../../shared/utils/dynamicCode";
 
 export function DynamicTicketCard({ ticket }) {
-  const [secondsLeft, setSecondsLeft] = useState(30);
-  const [tokenSlot, setTokenSlot] = useState(() =>
-    Math.floor(Date.now() / 30000)
-  );
+  const [timeState, setTimeState] = useState(() => getTimeWindow());
   const [copied, setCopied] = useState(false);
 
-  // 30-წამიანი უკუთვლის ტაიმერი და QR ტოკენის განახლება
   useEffect(() => {
     if (ticket.used) return;
 
     const interval = setInterval(() => {
-      const now = Date.now();
-      const remaining = 30 - (Math.floor(now / 1000) % 30);
-      setSecondsLeft(remaining);
-      setTokenSlot(Math.floor(now / 30000));
+      setTimeState(getTimeWindow());
     }, 1000);
 
     return () => clearInterval(interval);
   }, [ticket.used]);
 
-  // QR კოდში ჩაშენებული დინამიკური მონაცემი (ბილეთის კოდი + 30-წამიანი სლოტი)
-  const dynamicQrPayload = `${ticket.code}:${tokenSlot}`;
+  // ყოველ 30 წამში იცვლება როგორც QR კოდი, ისე ეკრანზე ნაჩვენები ბილეთის კოდი
+  const currentRollingCode = generateRollingTicketCode(
+    ticket.baseCode,
+    timeState.slot
+  );
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(ticket.code);
+    navigator.clipboard.writeText(currentRollingCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
 
-  const progressPercent = (secondsLeft / 30) * 100;
+  const progressPercent = (timeState.secondsLeft / 30) * 100;
 
   return (
     <div className="rounded-2xl border-[1.5px] border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden flex flex-col md:flex-row">
-      {/* მარცხენა ნაწილი: ბილეთის ინფორმაცია */}
       <div className="p-6 flex-1 flex flex-col justify-between gap-6 border-b md:border-b-0 md:border-r border-dashed border-zinc-300 dark:border-zinc-700">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
@@ -77,7 +76,6 @@ export function DynamicTicketCard({ ticket }) {
           </div>
         </div>
 
-        {/* მფლობელის დეტალები */}
         <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 grid grid-cols-2 gap-4 text-xs">
           <div>
             <span className="text-zinc-400 dark:text-zinc-500 block">
@@ -89,25 +87,26 @@ export function DynamicTicketCard({ ticket }) {
           </div>
           <div>
             <span className="text-zinc-400 dark:text-zinc-500 block">
-              ბილეთის ID
+              დინამიკური ID
             </span>
             <button
               onClick={handleCopyCode}
-              title="კოდის კოპირება სკანერისთვის"
+              title="მიმდინარე 30-წამიანი კოდის კოპირება"
               className="mt-0.5 inline-flex items-center gap-1.5 font-mono-num font-bold text-zinc-900 dark:text-white hover:opacity-75 cursor-pointer"
             >
-              <span>{ticket.code}</span>
-              {copied ? (
-                <Check className="w-3.5 h-3.5 text-emerald-500" />
-              ) : (
-                <Copy className="w-3.5 h-3.5 text-zinc-400" />
-              )}
+              <span>{ticket.used ? ticket.baseCode : currentRollingCode}</span>
+              {!ticket.used &&
+                (copied ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                ))}
             </button>
           </div>
         </div>
       </div>
 
-      {/* მარჯვენა ნაწილი: 30-წამიანი დინამიკური QR */}
+      {/* 30-წამიანი დინამიკური QR */}
       <div className="p-6 md:w-72 bg-zinc-50/70 dark:bg-zinc-950/50 flex flex-col items-center justify-center text-center gap-3">
         <div
           className={`p-3.5 rounded-2xl bg-white border border-zinc-200 shadow-xs transition-opacity ${
@@ -115,7 +114,7 @@ export function DynamicTicketCard({ ticket }) {
           }`}
         >
           <QRCodeSVG
-            value={dynamicQrPayload}
+            value={currentRollingCode}
             size={148}
             bgColor="#FFFFFF"
             fgColor="#09090B"
@@ -128,21 +127,20 @@ export function DynamicTicketCard({ ticket }) {
             ბილეთი უკვე დასკანერებულია შესასვლელში
           </p>
         ) : (
-          <div className="w-full max-w-[180px] space-y-1.5">
+          <div className="w-full max-w-45 space-y-1.5">
             <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
               <span className="flex items-center gap-1">
                 <RefreshCw
                   className="w-3 h-3 animate-spin"
                   style={{ animationDuration: "4s" }}
                 />
-                კოდი ახლდება
+                კოდი და QR ახლდება
               </span>
               <span className="font-mono-num font-bold text-zinc-900 dark:text-white">
-                {secondsLeft}წმ
+                {timeState.secondsLeft}წმ
               </span>
             </div>
 
-            {/* პროგრეს-ბარი */}
             <div className="w-full h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
               <div
                 className="h-full bg-zinc-900 dark:bg-white transition-all duration-1000 ease-linear"
