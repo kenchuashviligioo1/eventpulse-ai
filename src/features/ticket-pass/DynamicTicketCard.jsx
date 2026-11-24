@@ -45,18 +45,24 @@ export function DynamicTicketCard({ ticket }) {
 
   return (
     <div className="rounded-2xl border-[1.5px] border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-sm overflow-hidden flex flex-col md:flex-row">
+      {/* მარცხენა ნაწილი: ბილეთის ინფორმაცია და კატეგორია */}
       <div className="p-6 flex-1 flex flex-col justify-between gap-6 border-b md:border-b-0 md:border-r border-dashed border-zinc-300 dark:border-zinc-700">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            {ticket.used ? (
-              <Badge variant="default">
-                გამოყენებულია ({ticket.scannedAt})
-              </Badge>
-            ) : (
-              <Badge variant="success">აქტიური საშვი</Badge>
-            )}
-            <span className="text-xs text-zinc-400 dark:text-zinc-500 font-mono-num">
-              {formatPrice(ticket.paidPrice)}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {ticket.used ? (
+                <Badge variant="default">
+                  გამოყენებულია ({ticket.scannedAt})
+                </Badge>
+              ) : (
+                <Badge variant="success">აქტიური საშვი</Badge>
+              )}
+              <Badge variant="warning">{ticket.tierName || "Standard"}</Badge>
+            </div>
+            <span className="text-xs text-zinc-400 dark:text-zinc-500 font-mono-num shrink-0">
+              {ticket.paidPrice === 0
+                ? "უფასო / Pass"
+                : formatPrice(ticket.paidPrice)}
             </span>
           </div>
 
@@ -76,6 +82,7 @@ export function DynamicTicketCard({ ticket }) {
           </div>
         </div>
 
+        {/* მფლობელის დეტალები და 30-წამიანი კოდი */}
         <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 grid grid-cols-2 gap-4 text-xs">
           <div>
             <span className="text-zinc-400 dark:text-zinc-500 block">
@@ -106,7 +113,7 @@ export function DynamicTicketCard({ ticket }) {
         </div>
       </div>
 
-      {/* 30-წამიანი დინამიკური QR */}
+      {/* მარჯვენა ნაწილი: 30-წამიანი დინამიკური QR */}
       <div className="p-6 md:w-72 bg-zinc-50/70 dark:bg-zinc-950/50 flex flex-col items-center justify-center text-center gap-3">
         <div
           className={`p-3.5 rounded-2xl bg-white border border-zinc-200 shadow-xs transition-opacity ${

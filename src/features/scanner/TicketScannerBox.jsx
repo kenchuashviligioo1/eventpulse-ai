@@ -320,6 +320,12 @@ export function TicketScannerBox() {
 
             {scanResult.ticket && (
               <div className="mt-6 p-5 rounded-2xl bg-black/20 border border-white/20 text-left space-y-2.5 text-sm">
+                <div className="flex justify-between items-center gap-4 pb-2.5 border-b border-white/15">
+                  <span className="text-white/70">კატეგორია:</span>
+                  <span className="px-3 py-1 rounded-lg bg-white text-zinc-950 font-extrabold uppercase tracking-wider text-xs">
+                    {scanResult.ticket.tierName || "Standard"}
+                  </span>
+                </div>
                 <div className="flex justify-between gap-4">
                   <span className="text-white/70">სტუმარი:</span>
                   <span className="font-bold text-right">

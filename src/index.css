@@ -25,3 +25,12 @@
 .dark ::-webkit-scrollbar-thumb {
   background: #27272a;
 }
+/* ჰორიზონტალური სქროლბარის დამალვა კარუსელებსა და კატეგორიებზე */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

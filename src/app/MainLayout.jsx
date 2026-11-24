@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
-import { Navbar } from "../shared/components/Navbar";
+import { Navbar } from "../shared/components/PublicLayout";
 import { CheckoutModal } from "../features/checkout/CheckoutModal";
 import { useEventStore } from "../store/useEventStore";
 

@@ -26,6 +26,11 @@ const INITIAL_EVENTS = [
     image:
       "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1000&q=80",
     sponsors: ["TBC Concept", "CityPay.io", "Red Bull Georgia"],
+    ticketTiers: [
+      { id: "tier-1", name: "Standard", price: 50, quantity: 400 },
+      { id: "tier-2", name: "VIP Lounge", price: 120, quantity: 80 },
+      { id: "tier-3", name: "Backstage", price: 250, quantity: 20 },
+    ],
   },
   {
     id: "evt-2",
@@ -41,6 +46,12 @@ const INITIAL_EVENTS = [
     image:
       "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=1000&q=80",
     sponsors: ["Bank of Georgia", "GITA", "CityPay.io"],
+    ticketTiers: [
+      { id: "tier-21", name: "Attendee", price: 80, quantity: 200 },
+      { id: "tier-22", name: "Investor", price: 300, quantity: 50 },
+      { id: "tier-23", name: "Speaker", price: 0, quantity: 30 },
+      { id: "tier-24", name: "VIP", price: 180, quantity: 20 },
+    ],
   },
   {
     id: "evt-3",
@@ -56,6 +67,10 @@ const INITIAL_EVENTS = [
     image:
       "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1000&q=80",
     sponsors: ["TBC", "Bolt", "Borjomi"],
+    ticketTiers: [
+      { id: "tier-31", name: "Standard", price: 40, quantity: 200 },
+      { id: "tier-32", name: "VIP", price: 90, quantity: 50 },
+    ],
   },
 ];
 
@@ -97,6 +112,37 @@ export const useEventStore = create(
           theme: state.theme === "light" ? "dark" : "light",
         })),
 
+      // ახალი ივენთის დამატება
+      addEvent: (newEvent) =>
+        set((state) => ({
+          events: [
+            {
+              id: `evt-${Date.now()}`,
+              soldTickets: 0,
+              demandLevel: 45,
+              activeUsers: 32,
+              sponsors: ["TBC Concept", "CityPay.io"],
+              ...newEvent,
+            },
+            ...state.events,
+          ],
+        })),
+
+      // არსებული ივენთის რედაქტირება
+      updateEvent: (eventId, updatedFields) =>
+        set((state) => ({
+          events: state.events.map((ev) =>
+            ev.id === eventId ? { ...ev, ...updatedFields } : ev
+          ),
+        })),
+
+      // ივენთის წაშლა
+      deleteEvent: (eventId) =>
+        set((state) => ({
+          events: state.events.filter((ev) => ev.id !== eventId),
+        })),
+
+      // AI მოთხოვნის დონის შეცვლა
       updateEventDemand: (eventId, newDemand) =>
         set((state) => ({
           events: state.events.map((ev) =>
@@ -113,7 +159,6 @@ export const useEventStore = create(
       openCheckout: (eventId) => set({ selectedEventId: eventId }),
       closeCheckout: () => set({ selectedEventId: null }),
 
-      // Firestore Real-time Listener
       subscribeToTickets: () => {
         const q = query(
           collection(db, "tickets"),
@@ -134,7 +179,6 @@ export const useEventStore = create(
         );
       },
 
-      // ბილეთის შენახვა Firebase Firestore-ში + მომენტალური გამოჩენა UI-ში
       addTicket: async (ticketData) => {
         const newPayload = {
           ...ticketData,
@@ -163,7 +207,6 @@ export const useEventStore = create(
         });
       },
 
-      // ბილეთის გამოყენებულად მონიშვნა Firestore-ში
       markTicketUsed: async (ticketDocId) => {
         const ticketRef = doc(db, "tickets", ticketDocId);
         await updateDoc(ticketRef, {
