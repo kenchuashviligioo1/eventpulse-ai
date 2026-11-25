@@ -5,9 +5,11 @@ import {
   addDoc,
   doc,
   updateDoc,
+  deleteDoc,
   onSnapshot,
   query,
   orderBy,
+  increment,
 } from "firebase/firestore";
 import { db } from "../shared/lib/firebase";
 
@@ -18,6 +20,8 @@ const INITIAL_EVENTS = [
     category: "ფესტივალი / მუსიკა",
     date: "28 ნოემბერი, 2026 • 22:00",
     location: "Expo Georgia, პავილიონი 11",
+    description:
+      "ელექტრონული მუსიკისა და ვიზუალური ხელოვნების ღამე Expo Georgia-ს მე-11 პავილიონში.",
     basePrice: 50,
     totalTickets: 500,
     soldTickets: 412,
@@ -38,6 +42,8 @@ const INITIAL_EVENTS = [
     category: "კონფერენცია",
     date: "5 დეკემბერი, 2026 • 11:00",
     location: "Radisson Blu Iveria, თბილისი",
+    description:
+      "ტექნოლოგიური სტარტაპების, ინვესტორებისა და ხელოვნური ინტელექტის ყოველწლიური სამიტი.",
     basePrice: 80,
     totalTickets: 300,
     soldTickets: 85,
@@ -59,6 +65,8 @@ const INITIAL_EVENTS = [
     category: "აუდიო-ვიზუალური შოუ",
     date: "12 დეკემბერი, 2026 • 20:00",
     location: "Fabrika Tbilisi, საკონფერენციო სივრცე",
+    description:
+      "3D პროექციული მეფინგი და აუდიო-ვიზუალური ინსტალაციები Fabrika-ს სივრცეში.",
     basePrice: 40,
     totalTickets: 250,
     soldTickets: 140,
@@ -76,7 +84,7 @@ const INITIAL_EVENTS = [
 
 export const useEventStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
       theme: "light",
       events: INITIAL_EVENTS,
       selectedEventId: null,
@@ -112,57 +120,125 @@ export const useEventStore = create(
           theme: state.theme === "light" ? "dark" : "light",
         })),
 
-      // ახალი ივენთის დამატება
-      addEvent: (newEvent) =>
-        set((state) => ({
-          events: [
-            {
-              id: `evt-${Date.now()}`,
-              soldTickets: 0,
-              demandLevel: 45,
-              activeUsers: 32,
-              sponsors: ["TBC Concept", "CityPay.io"],
-              ...newEvent,
-            },
-            ...state.events,
-          ],
-        })),
+      // რეალურ დროში ღონისძიებების წამოღება Firebase-იდან
+      subscribeToEvents: () => {
+        const q = query(collection(db, "events"), orderBy("createdAt", "desc"));
+        return onSnapshot(
+          q,
+          (snapshot) => {
+            if (snapshot.empty) return;
+            const liveEvents = snapshot.docs.map((docSnap) => ({
+              id: docSnap.id,
+              ...docSnap.data(),
+            }));
+            set({ events: liveEvents });
+          },
+          (error) => {
+            console.error("Firestore events snapshot error:", error);
+          },
+        );
+      },
 
-      // არსებული ივენთის რედაქტირება
-      updateEvent: (eventId, updatedFields) =>
+      // ახალი ივენთის შენახვა Firebase-ში
+      addEvent: async (newEvent) => {
+        const eventPayload = {
+          soldTickets: 0,
+          demandLevel: 45,
+          activeUsers: 32,
+          sponsors: ["TBC Concept", "CityPay.io"],
+          ...newEvent,
+          createdAt: Date.now(),
+        };
+
+        try {
+          const docRef = await addDoc(collection(db, "events"), eventPayload);
+          const savedEvent = { id: docRef.id, ...eventPayload };
+
+          set((state) => {
+            const exists = state.events.some((e) => e.id === docRef.id);
+            return {
+              events: exists ? state.events : [savedEvent, ...state.events],
+            };
+          });
+        } catch (error) {
+          console.error("Failed to save event to Firebase:", error);
+          throw error;
+        }
+      },
+
+      // არსებული ივენთის რედაქტირება Firebase-ში
+      updateEvent: async (eventId, updatedFields) => {
         set((state) => ({
           events: state.events.map((ev) =>
-            ev.id === eventId ? { ...ev, ...updatedFields } : ev
+            ev.id === eventId ? { ...ev, ...updatedFields } : ev,
           ),
-        })),
+        }));
 
-      // ივენთის წაშლა
-      deleteEvent: (eventId) =>
+        if (!String(eventId).startsWith("evt-")) {
+          try {
+            const eventRef = doc(db, "events", eventId);
+            await updateDoc(eventRef, updatedFields);
+          } catch (error) {
+            console.error("Failed to update event in Firebase:", error);
+          }
+        }
+      },
+
+      // ივენთის წაშლა Firebase-იდან
+      deleteEvent: async (eventId) => {
         set((state) => ({
           events: state.events.filter((ev) => ev.id !== eventId),
-        })),
+        }));
 
-      // AI მოთხოვნის დონის შეცვლა
-      updateEventDemand: (eventId, newDemand) =>
+        if (!String(eventId).startsWith("evt-")) {
+          try {
+            await deleteDoc(doc(db, "events", eventId));
+          } catch (error) {
+            console.error("Failed to delete event from Firebase:", error);
+          }
+        }
+      },
+
+      // მოთხოვნის დონის შეცვლა Firebase-ში
+      updateEventDemand: async (eventId, newDemand) => {
+        const nextActiveUsers = Math.max(10, Math.round(newDemand * 1.8));
         set((state) => ({
           events: state.events.map((ev) =>
             ev.id === eventId
               ? {
                   ...ev,
                   demandLevel: newDemand,
-                  activeUsers: Math.max(10, Math.round(newDemand * 1.8)),
+                  activeUsers: nextActiveUsers,
                 }
-              : ev
+              : ev,
           ),
-        })),
+        }));
 
-      openCheckout: (eventId) => set({ selectedEventId: eventId }),
+        if (!String(eventId).startsWith("evt-")) {
+          try {
+            await updateDoc(doc(db, "events", eventId), {
+              demandLevel: newDemand,
+              activeUsers: nextActiveUsers,
+            });
+          } catch (error) {
+            console.error("Failed to update demand in Firebase:", error);
+          }
+        }
+      },
+
+      openCheckout: (eventOrId) =>
+        set({
+          selectedEventId:
+            typeof eventOrId === "object" && eventOrId !== null
+              ? eventOrId.id
+              : eventOrId,
+        }),
       closeCheckout: () => set({ selectedEventId: null }),
 
       subscribeToTickets: () => {
         const q = query(
           collection(db, "tickets"),
-          orderBy("createdAt", "desc")
+          orderBy("createdAt", "desc"),
         );
         return onSnapshot(
           q,
@@ -174,8 +250,8 @@ export const useEventStore = create(
             set({ tickets: liveTickets });
           },
           (error) => {
-            console.error("Firestore snapshot error:", error);
-          }
+            console.error("Firestore tickets snapshot error:", error);
+          },
         );
       },
 
@@ -187,6 +263,10 @@ export const useEventStore = create(
 
         const docRef = await addDoc(collection(db, "tickets"), newPayload);
         const savedTicket = { id: docRef.id, ...newPayload };
+
+        const targetEvent = get().events.find(
+          (e) => e.id === ticketData.eventId,
+        );
 
         set((state) => {
           const alreadyExists = state.tickets.some((t) => t.id === docRef.id);
@@ -201,10 +281,21 @@ export const useEventStore = create(
                     ...ev,
                     soldTickets: Math.min(ev.totalTickets, ev.soldTickets + 1),
                   }
-                : ev
+                : ev,
             ),
           };
         });
+
+        // გაყიდული ბილეთების რაოდენობის განახლება Firebase-შიც
+        if (targetEvent && !String(targetEvent.id).startsWith("evt-")) {
+          try {
+            await updateDoc(doc(db, "events", targetEvent.id), {
+              soldTickets: increment(1),
+            });
+          } catch (err) {
+            console.error("Failed to increment soldTickets in Firebase:", err);
+          }
+        }
       },
 
       markTicketUsed: async (ticketDocId) => {
@@ -230,11 +321,10 @@ export const useEventStore = create(
       name: "eventpulse-storage",
       partialize: (state) => ({
         theme: state.theme,
-        events: state.events,
         myTicketIds: state.myTicketIds,
         isScannerAuth: state.isScannerAuth,
         sponsorScans: state.sponsorScans,
       }),
-    }
-  )
+    },
+  ),
 );
