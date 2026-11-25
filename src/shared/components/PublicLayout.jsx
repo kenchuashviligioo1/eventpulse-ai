@@ -15,7 +15,6 @@ import {
   X,
   QrCode,
   LayoutDashboard,
-  User,
   LogIn,
 } from "lucide-react";
 import { useEventStore } from "../../store/useEventStore";
@@ -39,11 +38,6 @@ export function Navbar() {
       return null;
     }
   });
-
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [fullName, setFullName] = useState("");
-  const [contact, setContact] = useState("");
-  const [authError, setAuthError] = useState("");
 
   useEffect(() => {
     const syncUser = () => {
@@ -79,42 +73,8 @@ export function Navbar() {
     const searchString = next.toString();
     navigate(
       { pathname: "/", search: searchString ? `?${searchString}` : "" },
-      { replace: true }
+      { replace: true },
     );
-  };
-
-  const handleLoginSubmit = (e) => {
-    e.preventDefault();
-    setAuthError("");
-
-    const trimmedContact = contact.trim();
-    const trimmedName = fullName.trim();
-
-    if (!trimmedContact || trimmedContact.length < 5) {
-      setAuthError("შეიყვანეთ მობილურის ნომერი ან ელ-ფოსტა");
-      return;
-    }
-
-    const matchedTicket = tickets.find(
-      (t) =>
-        t.ownerPhone?.toLowerCase() === trimmedContact.toLowerCase() ||
-        t.ownerEmail?.toLowerCase() === trimmedContact.toLowerCase()
-    );
-
-    const userPayload = {
-      name: trimmedName || matchedTicket?.ownerName || "მომხმარებელი",
-      contact: trimmedContact,
-      loggedInAt: new Date().toISOString(),
-    };
-
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userPayload));
-    setCurrentUser(userPayload);
-    window.dispatchEvent(new Event("ep-user-updated"));
-
-    setIsAuthModalOpen(false);
-    setFullName("");
-    setContact("");
-    navigate("/profile");
   };
 
   const initials = currentUser?.name
@@ -127,180 +87,108 @@ export function Navbar() {
     : "EP";
 
   return (
-    <>
-      <header className="sticky top-0 z-40 bg-[#14161F] text-white border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 sm:gap-8">
-          {/* სუფთა ბრენდ-ლოგო */}
-          <Link to="/" className="flex items-center gap-2.5 shrink-0">
-            <span className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-xs tracking-tighter">
-              EP
-            </span>
-            <span className="text-lg font-extrabold tracking-tight">
-              event<span className="text-indigo-400">pulse</span>
-            </span>
-          </Link>
+    <header className="sticky top-0 z-40 bg-[#14161F] text-white border-b border-white/10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 sm:gap-8">
+        {/* ლოგო */}
+        <Link to="/" className="flex items-center shrink-0">
+          <img
+            src="/EventPulse-logo.png"
+            alt="EventPulse"
+            className="h-9 sm:h-10 w-auto object-contain"
+          />
+        </Link>
 
-          {/* საძიებო ველი */}
-          <div className="flex-1 max-w-lg">
-            <div className="relative">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="მოძებნე ღონისძიება, არტისტი ან ლოკაცია"
-                className="w-full h-10 pl-10 pr-9 rounded-lg bg-white/10 hover:bg-white/12 focus:bg-white text-white focus:text-zinc-900 placeholder:text-zinc-400 focus:placeholder:text-zinc-500 text-xs sm:text-sm transition outline-none"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => handleSearchChange("")}
-                  aria-label="ძიების გასუფთავება"
-                  className="p-1 text-zinc-400 hover:text-zinc-700 absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* მარჯვენა ნავიგაცია */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <NavLink
-              to="/my-tickets"
-              className={({ isActive }) =>
-                `px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
-                  isActive
-                    ? "bg-white/15 text-white"
-                    : "text-zinc-300 hover:text-white hover:bg-white/10"
-                }`
-              }
-            >
-              <Ticket className="w-4 h-4 text-indigo-400" />
-              <span className="hidden md:inline">ჩემი ბილეთები</span>
-              {activeTicketsCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white font-mono-num text-[10px] font-bold leading-none">
-                  {activeTicketsCount}
-                </span>
-              )}
-            </NavLink>
-
-            {currentUser ? (
-              <NavLink
-                to="/profile"
-                className={({ isActive }) =>
-                  `pl-1.5 pr-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
-                    isActive
-                      ? "bg-indigo-600 text-white"
-                      : "bg-white/10 hover:bg-white/15 text-white"
-                  }`
-                }
-              >
-                <span className="w-6 h-6 rounded bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
-                  {initials}
-                </span>
-                <span className="max-w-24 truncate hidden sm:inline">
-                  {currentUser.name.split(" ")[0]}
-                </span>
-              </NavLink>
-            ) : (
+        {/* საძიებო ველი */}
+        <div className="flex-1 max-w-lg">
+          <div className="relative">
+            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="ძებნა"
+              className="w-full h-10 pl-10 pr-9 rounded-lg bg-white/10 hover:bg-white/12 focus:bg-white text-white focus:text-zinc-900 placeholder:text-zinc-400 focus:placeholder:text-zinc-500 text-xs sm:text-sm transition outline-none"
+            />
+            {query && (
               <button
                 type="button"
-                onClick={() => {
-                  setAuthError("");
-                  setIsAuthModalOpen(true);
-                }}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>შესვლა</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-label="თემის შეცვლა"
-              className="w-9 h-9 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition cursor-pointer"
-            >
-              {theme === "light" ? (
-                <Moon className="w-4 h-4" />
-              ) : (
-                <Sun className="w-4 h-4" />
-              )}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* შესვლის მოდალი */}
-      {isAuthModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65">
-          <div className="w-full max-w-sm rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#161822] shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  პროფილზე შესვლა
-                </h3>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsAuthModalOpen(false)}
-                className="p-1 text-zinc-400 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
+                onClick={() => handleSearchChange("")}
+                aria-label="ძიების გასუფთავება"
+                className="p-1 text-zinc-400 hover:text-zinc-700 absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
-            </div>
-
-            <form onSubmit={handleLoginSubmit} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  სახელი და გვარი
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="მაგ. გიორგი კენჭუაშვილი"
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-                  მობილურის ნომერი ან ელ-ფოსტა
-                </label>
-                <input
-                  type="text"
-                  autoFocus
-                  value={contact}
-                  onChange={(e) => setContact(e.target.value)}
-                  placeholder="555 12 34 56 ან name@gmail.com"
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-600"
-                />
-              </div>
-
-              {authError && (
-                <p className="text-xs text-rose-500">{authError}</p>
-              )}
-
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition cursor-pointer"
-              >
-                გაგრძელება
-              </button>
-            </form>
+            )}
           </div>
         </div>
-      )}
-    </>
+
+        {/* მარჯვენა ნავიგაცია */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <NavLink
+            to="/my-tickets"
+            className={({ isActive }) =>
+              `px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                isActive
+                  ? "bg-white/15 text-white"
+                  : "text-zinc-300 hover:text-white hover:bg-white/10"
+              }`
+            }
+          >
+            <Ticket className="w-4 h-4 text-indigo-400" />
+            <span className="hidden md:inline">ჩემი ბილეთები</span>
+            {activeTicketsCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white font-mono-num text-[10px] font-bold leading-none">
+                {activeTicketsCount}
+              </span>
+            )}
+          </NavLink>
+
+          {currentUser ? (
+            <NavLink
+              to="/profile"
+              className={({ isActive }) =>
+                `pl-1.5 pr-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition ${
+                  isActive
+                    ? "bg-indigo-600 text-white"
+                    : "bg-white/10 hover:bg-white/15 text-white"
+                }`
+              }
+            >
+              <span className="w-6 h-6 rounded bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {initials}
+              </span>
+              <span className="max-w-24 truncate hidden sm:inline">
+                {currentUser.name.split(" ")[0]}
+              </span>
+            </NavLink>
+          ) : (
+            <Link
+              to="/login"
+              className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>შესვლა</span>
+            </Link>
+          )}
+
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label="თემის შეცვლა"
+            className="w-9 h-9 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition cursor-pointer"
+          >
+            {theme === "light" ? (
+              <Moon className="w-4 h-4" />
+            ) : (
+              <Sun className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+      </div>
+    </header>
   );
 }
 
-// მინიმალისტური ტექსტური კატეგორიების ზოლი (TKT / Biletebi სტილში)
 function CategoryStrip() {
   const events = useEventStore((state) => state.events);
   const navigate = useNavigate();
@@ -308,7 +196,7 @@ function CategoryStrip() {
   const activeCategory = searchParams.get("cat") || "ALL";
 
   const categories = Array.from(
-    new Set(events.map((e) => e.category).filter(Boolean))
+    new Set(events.map((e) => e.category).filter(Boolean)),
   );
 
   const handleCategoryClick = (cat) => {
@@ -321,7 +209,7 @@ function CategoryStrip() {
     const searchString = next.toString();
     navigate(
       { pathname: "/", search: searchString ? `?${searchString}` : "" },
-      { replace: true }
+      { replace: true },
     );
   };
 
@@ -379,14 +267,13 @@ export function PublicLayout() {
       <footer className="bg-[#14161F] text-zinc-400 border-t border-white/10 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 text-xs">
           <div className="space-y-2.5">
-            <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-[11px]">
-                EP
-              </span>
-              <span className="text-base font-extrabold text-white tracking-tight">
-                event<span className="text-indigo-400">pulse</span>
-              </span>
-            </div>
+            <Link to="/" className="inline-flex items-center">
+              <img
+                src="/EventPulse-logo.png"
+                alt="EventPulse"
+                className="h-9 w-auto object-contain"
+              />
+            </Link>
             <p className="leading-relaxed">
               ღონისძიებების ბილეთების ონლაინ პლატფორმა.
             </p>
